@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LIMEN</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --ink: #e4dec9; --dim: #a39d8b; --faint: #6f6b60; --line: rgba(228,222,201,0.16); --cold: #8fd0e0; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; color: #cfc9b6; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+  body.play, body.play * { cursor: none !important; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* ---- in-game display ---- */
+  #hud { position: fixed; inset: 0; pointer-events: none; text-shadow: 0 0 8px #000, 0 0 2px #000; opacity: 0; transition: opacity 0.6s; }
+  body.play #hud { opacity: 1; }
+  #dot { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; background: rgba(255,255,255,0.5); border-radius: 50%; box-shadow: 0 0 3px #000; }
+  .box { position: absolute; padding: 10px 14px; background: rgba(0,0,0,0.38); border: 1px solid var(--line); border-radius: 3px; }
+  .cap { display: block; font-size: 9px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--faint); margin-bottom: 5px; }
+  #goal { left: 18px; top: 16px; max-width: max(330px, min(400px, 30vw)); }
+  #inv span { white-space: nowrap; }
+  #obj { font-size: 12px; line-height: 1.55; letter-spacing: 0.06em; color: var(--ink); }
+  #inv { margin-top: 9px; font-size: 12px; letter-spacing: 0.08em; color: var(--dim); display: flex; gap: 16px; }
+  #inv b { font-weight: 400; color: var(--ink); }
+  #inv .done b { color: #d9c074; }
+  /* the radar: a compass tape across the top, with small models of what lies each way */
+  #radar { position: absolute; left: 50%; top: 10px; width: 460px; margin-left: -230px; height: 82px; opacity: 0; transition: opacity 0.6s; -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+  #radTape { position: absolute; left: 0; right: 0; top: 50px; height: 12px; border-top: 1px solid rgba(228,222,201,0.35);
+    background-image: linear-gradient(90deg, rgba(228,222,201,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(228,222,201,0.85) 1px, transparent 1px); background-repeat: repeat-x; }
+  #radDirs span { position: absolute; top: 64px; font-size: 10px; letter-spacing: 0.18em; color: var(--dim); transform: translateX(-50%); transition: opacity 0.2s; }
+  #radDirs span.c { color: var(--ink); }
+  #radNotch { position: absolute; left: 50%; top: 45px; margin-left: -5px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid #d9c074; }
+  .rm { position: absolute; bottom: 33px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; transition: opacity 0.25s; }
+  .rm img { height: 22px; filter: drop-shadow(0 0 3px #000); }
+  .rm small { font-size: 9px; letter-spacing: 0.1em; color: var(--dim); white-space: nowrap; text-shadow: 0 0 4px #000; }
+  .rm.main img { height: 34px; filter: drop-shadow(0 0 5px rgba(217,192,116,0.7)) drop-shadow(0 0 2px #000); }
+  .rm.main small { color: #d9c074; }
+  .rm.main::after { content: ""; position: absolute; bottom: -7px; width: 7px; height: 7px; background: #d9c074; transform: rotate(45deg); }
+  .rm.edge { opacity: 0.55; }
+  /* the pump computer and the radio */
+  .ui { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 7; background: rgba(0,0,0,0.55); }
+  #termBox { position: relative; width: min(720px, 90vw); height: min(480px, 80vh); background: radial-gradient(ellipse at center, #062a12, #010a04 80%); border: 14px solid #b9b19a; border-radius: 22px; box-shadow: inset 0 0 70px rgba(0,0,0,0.9), 0 0 0 3px #6d6756, 0 0 50px #000; padding: 26px 32px; overflow: hidden; }
+  #termBox::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.28) 0 2px, transparent 2px 4px); }
+  #termText { margin: 0; color: #63ff94; font: 14px/1.6 ui-monospace, Consolas, monospace; text-shadow: 0 0 7px rgba(80,255,140,0.65); white-space: pre-wrap; }
+  #termFoot { position: absolute; bottom: 12px; left: 32px; color: #2f9a52; font-size: 11px; letter-spacing: 0.2em; }
+  #radioBox { position: relative; width: min(640px, 90vw); padding: 26px 32px 22px; background: linear-gradient(#4a2a14, #2b170a); border-radius: 18px; border: 2px solid #1a0d05; box-shadow: inset 0 2px 0 rgba(255,220,160,0.15), 0 0 60px #000; color: #f2d69a; }
+  #radFreq { font-size: 40px; letter-spacing: 0.1em; text-align: center; text-shadow: 0 0 14px rgba(255,190,80,0.7); }
+  #radDial { position: relative; height: 54px; margin: 14px 0 10px; background: linear-gradient(#f3d68f, #d9b25e); border-radius: 6px; box-shadow: inset 0 0 18px rgba(120,60,0,0.6); overflow: hidden;
+    background-image: linear-gradient(90deg, rgba(60,30,0,0.75) 1px, transparent 1px), linear-gradient(#f3d68f, #d9b25e); background-size: 4% 40%, 100% 100%; background-repeat: repeat-x, no-repeat; }
+  #radNeedle { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1px; background: #b01a10; box-shadow: 0 0 6px #ff4020; }
+  #radScale { display: flex; justify-content: space-between; font-size: 10px; color: #7a4a20; position: absolute; left: 6px; right: 6px; bottom: 4px; }
+  #radSig { height: 8px; background: #1a0d05; border-radius: 4px; overflow: hidden; } #radSig i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #6a8a2a, #d8e85a); }
+  #radText { min-height: 92px; margin-top: 14px; font-size: 13px; line-height: 1.7; font-style: italic; color: #f7e4b5; }
+  #radFoot { margin-top: 10px; font-size: 10px; letter-spacing: 0.25em; color: #a77b45; text-align: center; }
+  #status { left: 18px; bottom: 16px; width: 200px; }
+  .st { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 8px; font-size: 10px; letter-spacing: 0.14em; color: var(--dim); height: 15px; transition: opacity 0.8s; }
+  .st .bar { height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; }
+  .st i { display: block; height: 100%; border-radius: 2px; }
+  #comp { background: #d8d2bf; } #stam { background: #7fa8a4; } #bat { background: #d9b24e; }
+  #gearBox { right: 18px; bottom: 16px; text-align: right; display: none; }
+  #gear { font-size: 12px; letter-spacing: 0.06em; color: var(--cold); display: flex; flex-direction: column; gap: 4px; }
+  #gear span { display: flex; align-items: center; justify-content: flex-end; gap: 7px; min-height: 34px; }
+  #gear em { font-style: normal; color: var(--ink); }
+  #gear kbd { margin: 0 0 0 4px !important; }
+  .ico { display: inline-block; vertical-align: middle; image-rendering: auto; }
+  #inv .ico { margin-right: 2px; position: relative; top: -1px; }
+  #inv span { display: inline-flex; align-items: center; gap: 4px; }
+  #inv span:not(.done) .ico { opacity: 0.55; filter: grayscale(0.6); }
+  #scare { position: fixed; inset: 0; display: none; z-index: 9; pointer-events: none; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, #1b1a16 0%, #000 72%); }
+  #scareC { height: 96vh; image-rendering: pixelated; filter: contrast(1.35) brightness(1.05); }
+  #gear em.wet { color: #6fb6d8; }
+  #gear .kit .ico { opacity: 0.3; filter: grayscale(1); } #gear .kit .ico.have { opacity: 1; filter: none; }
+  /* ---- scenes: letterbox, a title and a line of text ---- */
+  #bars i { position: fixed; left: 0; right: 0; height: 0; background: #000; transition: height 1.2s ease; pointer-events: none; z-index: 5; }
+  #bars i:first-child { top: 0; } #bars i:last-child { bottom: 0; }
+  body.cine #bars i { height: 11vh; }
+  body.cine #hud { opacity: 0 !important; }
+  #cap { position: fixed; left: 50%; bottom: 16vh; transform: translateX(-50%); width: min(720px, 86vw); text-align: center; opacity: 0; transition: opacity 1.3s; pointer-events: none; z-index: 6; color: #e4dec9; text-shadow: 0 0 12px #000, 0 0 3px #000; }
+  #capH { display: block; font-weight: 400; font-size: 13px; letter-spacing: 0.7em; text-transform: uppercase; color: #d9c074; margin-bottom: 14px; }
+  #capH:empty { display: none; }
+  #capT { font-size: 15px; line-height: 1.85; letter-spacing: 0.06em; font-style: italic; }
+  #skip { position: fixed; right: 24px; bottom: 4vh; font-size: 10px; letter-spacing: 0.3em; color: #6f6b60; opacity: 0; transition: opacity 1s; z-index: 6; pointer-events: none; text-transform: uppercase; }
+  body.cine #skip { opacity: 1; }
+  #gear kbd, #prompt kbd { font-family: inherit; font-size: 10px; padding: 1px 5px; margin-right: 6px; border: 1px solid var(--line); border-radius: 3px; color: var(--ink); background: rgba(255,255,255,0.06); }
+  #rec { position: absolute; right: 22px; top: 18px; font-size: 13px; letter-spacing: 0.16em; color: #e4dec9; text-align: right; }
+  #rec i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #d23b2e; margin-right: 8px; animation: pulse 1.6s steps(2) infinite; }
+  #rec small { display: block; margin-top: 4px; font-size: 10px; color: var(--dim); }
+  #label { position: absolute; left: 0; right: 0; top: 17%; text-align: center; font-size: 16px; letter-spacing: 0.7em; text-transform: uppercase; opacity: 0; transition: opacity 2.5s; color: #d8d2bf; }
+  #prompt { position: absolute; left: 50%; transform: translateX(-50%); top: 58%; padding: 7px 14px; font-size: 13px; letter-spacing: 0.1em; opacity: 0; transition: opacity 0.3s; color: var(--ink); background: rgba(0,0,0,0.45); border: 1px solid var(--line); border-radius: 3px; white-space: nowrap; }
+  #tape { position: absolute; left: 50%; transform: translateX(-50%); bottom: 27%; width: min(640px, 80vw); padding: 12px 18px; text-align: center; font-size: 13px; line-height: 1.75; letter-spacing: 0.06em; font-style: italic; opacity: 0; transition: opacity 1.5s; color: #e4dec9; background: rgba(0,0,0,0.42); border-left: 2px solid #d9c074; }
+  #note { position: absolute; left: 0; right: 0; bottom: 19%; text-align: center; font-size: 13px; letter-spacing: 0.14em; opacity: 0; transition: opacity 1.2s; color: #cfc9b6; }
+  #hint { position: absolute; left: 0; right: 0; bottom: 12%; text-align: center; font-size: 12px; letter-spacing: 0.14em; opacity: 0; transition: opacity 1.2s; color: #9a9585; }
+
+  /* ---- menu ---- */
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(8,8,6,0.78), rgba(0,0,0,0.97)); text-align: center; user-select: none; }
+  .panel { display: flex; flex-direction: column; align-items: center; width: min(560px, 92vw); max-height: 88vh; }
+  .panel[hidden] { display: none; }
+  h1 { font-weight: 400; font-size: 54px; letter-spacing: 0.9em; margin: 0 0 6px 0.9em; color: var(--ink); }
+  h2 { font-weight: 400; font-size: 18px; letter-spacing: 0.6em; margin: 0 0 18px 0.6em; text-transform: uppercase; color: var(--ink); }
+  .sub { font-size: 12px; letter-spacing: 0.45em; color: #8f8a7b; margin-bottom: 38px; text-transform: uppercase; }
+  .btn { font: inherit; font-size: 13px; letter-spacing: 0.4em; text-transform: uppercase; color: var(--dim); background: rgba(255,255,255,0.03); border: 1px solid var(--line); border-radius: 3px; padding: 11px 26px 11px 30px; margin: 5px; min-width: 250px; cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+  .btn:hover, .btn:focus-visible { color: var(--ink); background: rgba(255,255,255,0.09); border-color: rgba(228,222,201,0.45); outline: none; }
+  .btn.big { color: var(--ink); border-color: rgba(228,222,201,0.4); padding: 15px 26px 15px 30px; }
+  .btn.small { min-width: 150px; }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .rowbtn { display: flex; margin-top: 16px; }
+  #lockNote { min-height: 18px; margin-top: 14px; font-size: 11px; letter-spacing: 0.14em; color: #b89a5a; }
+  #stats { position: absolute; bottom: 22px; left: 0; right: 0; font-size: 11px; letter-spacing: 0.16em; color: #5e5a50; }
+  #settingsGrid { width: 100%; overflow-y: auto; text-align: left; padding-right: 8px; }
+  #settingsGrid h3 { font-weight: 400; font-size: 10px; letter-spacing: 0.35em; text-transform: uppercase; color: var(--faint); margin: 16px 0 6px; padding-bottom: 5px; border-bottom: 1px solid var(--line); }
+  #settingsGrid h3:first-child { margin-top: 0; }
+  .row { display: grid; grid-template-columns: 1fr 170px 54px; align-items: center; gap: 14px; padding: 6px 0; font-size: 12px; letter-spacing: 0.06em; color: var(--ink); cursor: pointer; }
+  .row small { display: block; font-size: 10px; color: var(--faint); margin-top: 2px; }
+  .row .val { text-align: right; color: var(--dim); font-size: 11px; }
+  input[type=range] { width: 100%; accent-color: #d8d2bf; cursor: pointer; }
+  input[type=checkbox] { width: 16px; height: 16px; accent-color: #d8d2bf; justify-self: end; cursor: pointer; }
+  table.keys { font-size: 12px; letter-spacing: 0.08em; color: var(--dim); border-spacing: 16px 6px; text-align: left; }
+  table.keys td:first-child { color: var(--ink); text-align: right; white-space: nowrap; }
+  #end { display: none; background: #f3efe4; cursor: pointer; animation: endbg 4s ease forwards; overflow-y: auto; }
+  @keyframes endbg { 0% { background: #f6f3ea; } 100% { background: #0c0b09; } }
+  #end p { max-width: 580px; font-size: 14px; line-height: 1.95; letter-spacing: 0.08em; color: #c9c2ad; margin: 0 0 16px; font-style: italic; }
+  #end .ln, #end .late { opacity: 0; animation: lnin 2.6s ease forwards; }
+  #end.all { animation: none; background: #0c0b09; }
+  #end.all .ln, #end.all .late { animation-delay: 0s !important; animation-duration: 0.4s; }
+  @keyframes lnin { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  #end .theend { font-size: 11px; letter-spacing: 0.6em; text-transform: uppercase; color: #d9c074; margin: 26px 0 18px; }
+  #endStats { font-size: 11px; letter-spacing: 0.18em; color: #8f8a7b; line-height: 2; }
+  #endMet { font-size: 11px; letter-spacing: 0.12em; color: #6f6b60; line-height: 1.9; max-width: 600px; margin: 10px auto 0; }
+  #endRec { position: fixed; right: 22px; top: 18px; font-size: 13px; letter-spacing: 0.16em; color: #e4dec9; }
+  #endRec i { display: inline-block; width: 9px; height: 9px; background: #e4dec9; margin-right: 8px; }
+  .go { font-size: 13px; letter-spacing: 0.5em; text-transform: uppercase; color: var(--ink); animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div id="dot"></div>
+  <div id="goal" class="box"><span class="cap">next</span><div id="obj"></div><div id="inv"></div></div>
+  <div id="radar"><div id="radTape"></div><div id="radDirs"></div><div id="radMarks"></div><i id="radNotch"></i></div>
+  <div id="status" class="box">
+    <div class="st" id="compWrap"><span>composure</span><div class="bar"><i id="comp"></i></div></div>
+    <div class="st" id="stamWrap"><span>breath</span><div class="bar"><i id="stam"></i></div></div>
+    <div class="st" id="batWrap"><span>torch</span><div class="bar"><i id="bat"></i></div></div>
+  </div>
+  <div id="gearBox" class="box"><span class="cap">carried</span><div id="gear"></div></div>
+  <div id="rec"><i></i><span id="recT">REC 00:00:00</span><small id="recD"></small></div>
+  <div id="label"></div>
+  <div id="prompt"></div>
+  <div id="tape"></div>
+  <div id="note"></div>
+  <div id="hint"></div>
+</div>
+
+<div id="overlay" class="screen">
+  <div class="panel" id="pMain">
+    <h1>LIMEN</h1>
+    <div class="sub">there is only further</div>
+    <button class="btn big" id="bPlay" disabled>preparing</button>
+    <button class="btn" id="bNew" hidden>start over</button>
+    <button class="btn" id="bSettings">settings</button>
+    <button class="btn" id="bControls">controls</button>
+    <div id="lockNote"></div>
+  </div>
+  <div class="panel" id="pSettings" hidden>
+    <h2>settings</h2>
+    <div id="settingsGrid"></div>
+    <div class="rowbtn"><button class="btn small" id="bReset">defaults</button><button class="btn small" data-back>back</button></div>
+  </div>
+  <div class="panel" id="pControls" hidden>
+    <h2>controls</h2>
+    <table class="keys">
+      <tr><td>mouse</td><td>look — the pointer is captured while you play</td></tr>
+      <tr><td>W A S D</td><td>move</td></tr>
+      <tr><td>shift</td><td>run · swim fast · fly fast</td></tr>
+      <tr><td>space</td><td>jump · rise</td></tr>
+      <tr><td>ctrl or C</td><td>crouch · sink</td></tr>
+      <tr><td>left mouse</td><td>fire the shotgun (two barrels)</td></tr>
+      <tr><td>R</td><td>reload</td></tr>
+      <tr><td>E</td><td>use: doors, hatches, computers, fuse boxes, the radio</td></tr>
+      <tr><td>Esc</td><td>pause</td></tr>
+      <tr><td>E</td><td>use a hatch or a door</td></tr>
+      <tr><td>Q</td><td>use a first-aid kit</td></tr>
+      <tr><td>G</td><td>strike a flare</td></tr>
+      <tr><td>F</td><td>torch on / off</td></tr>
+      <tr><td>esc or P</td><td>pause, and release the pointer</td></tr>
+      <tr><td>F11 · M</td><td>fullscreen · mute</td></tr>
+    </table>
+    <div class="rowbtn"><button class="btn small" data-back>back</button></div>
+  </div>
+  <div id="stats"></div>
+</div>
+
+<div id="term" class="ui"><div id="termBox"><pre id="termText"></pre><div id="termFoot">number keys · enter · backspace · E to leave</div></div></div>
+<div id="radioUI" class="ui"><div id="radioBox"><div id="radFreq">FM 88.0</div><div id="radDial"><div id="radScale"><span>88</span><span>92</span><span>96</span><span>100</span><span>104</span><span>108</span></div><i id="radNeedle"></i></div><div id="radSig"><i></i></div><div id="radText"></div><div id="radFoot">A / D or the mouse to tune · E to leave</div></div></div>
+<div id="scare"><canvas id="scareC" width="72" height="92"></canvas></div>
+<div id="bars"><i></i><i></i></div>
+<div id="cap"><b id="capH"></b><span id="capT"></span></div>
+<div id="skip">space — skip</div>
+<div id="end" class="screen">
+  <div id="endRec" class="late" style="animation-delay: 1s"><i></i>STOP</div>
+  <p class="ln" style="animation-delay: 4s">The white door opens inward, onto a kitchen. Your kitchen. The kettle is just coming to the boil.</p>
+  <p class="ln" style="animation-delay: 8.5s">The light is the ordinary kind. The clock on the wall shows the same minute you leaned on that wall in the corridor.</p>
+  <p class="ln" style="animation-delay: 13s">You sit down at the table. Nobody has noticed you were gone. You are no longer sure that you were.</p>
+  <p class="ln" style="animation-delay: 17.5s">On the table is a cassette recorder you have never owned. Its red light is on. It is still recording.</p>
+  <p class="ln" style="animation-delay: 22s">When at last you look back, the door is only the pantry door. Behind it, very faintly, something is humming.</p>
+  <div class="theend late" style="animation-delay: 26.5s">— end of tape —</div>
+  <div id="endStats" class="late" style="animation-delay: 28s"></div>
+  <div id="endMet" class="late" style="animation-delay: 29s"></div>
+  <div class="rowbtn late" style="animation-delay: 30s">
+    <button class="btn" id="bKeep">keep walking</button>
+    <button class="btn" id="bAgain">begin again</button>
+  </div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

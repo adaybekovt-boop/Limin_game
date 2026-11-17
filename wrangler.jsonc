@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "limen",
+  "compatibility_date": "2026-11-01",
+  // Static-only Worker: files are served straight from Cloudflare's edge cache,
+  // no Worker script runs per request (free and fastest).
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  }
+}
